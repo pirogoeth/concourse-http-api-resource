@@ -131,3 +131,41 @@ def test_data_ensure_ascii(httpbin):
     output = cmd('out', source)
 
     assert output['form'] == {'field': '{"test": "日本語"}'}
+
+
+def test_params_file_inject(httpbin):
+    """ Ensure that file content gets injected to param
+    """
+
+    source = {
+        "uri": httpbin + "/post",
+        "method": "POST",
+        "form_data": {
+            "triggered_by": {
+                "commit_sha": "@data/id.txt",
+            },
+        },
+    }
+
+    output = cmd("out", source)
+
+    assert output["form"] == {"triggered_by": '{"commit_sha": "aebe128"}'}
+
+
+def test_params_file_inject_trim(httpbin):
+    """ Ensure that file content gets trimmed and injected to param
+    """
+
+    source = {
+        "uri": httpbin + "/post",
+        "method": "POST",
+        "form_data": {
+            "triggered_by": {
+                "commit_sha": "-@data/padded.txt",
+            },
+        },
+    }
+
+    output = cmd("out", source)
+
+    assert output["form"] == {"triggered_by": '{"commit_sha": "cafe430"}'}

@@ -6,6 +6,7 @@ from helpers import cmd
 
 HIPCHAT_TOKEN = os.environ.get('HIPCHAT_TOKEN')
 
+
 @pytest.mark.skipif(not HIPCHAT_TOKEN, reason='hipchat token not provided')
 def test_hipchat_notify():
     """Test posting notification to Hipchat."""

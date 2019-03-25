@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+import io
 import json
 import logging as log
 import os
@@ -7,6 +8,90 @@ import sys
 import tempfile
 
 import requests
+
+
+class FileReference(object):
+    """ FileReference is created to represent a file reference
+        inside of a resource parameter.
+
+        "@path/to/file" is a reference to a file which is returned, verbatim.
+        "-@path/to/file" is a reference to a file which will have it's contents
+            `strip()`'d before being inserted.
+    """
+
+    path: str = None
+    strip: bool = False
+
+    class Unparseable(Exception):
+        """ Unparseable exception is thrown when the file reference
+            can not be parsed.
+        """
+
+        def __init__(self, value):
+            self.value = value
+
+        def __str__(self):
+            return f"Could not parse file path out of value `{self.value}`"
+
+        def __repr__(self):
+            return str(self)
+
+    @classmethod
+    def parse(cls, value: str) -> "FileReference":
+        path = None
+        strip = False
+
+        if value.startswith("@"):
+            path = value[1:]
+        elif value.startswith("-@"):
+            path = value[2:]
+            strip = True
+        else:
+            raise FileReference.Unparseable(value)
+
+        return cls(path, strip=strip)
+
+    def __init__(self, path, strip=False):
+        self.path = path
+        self.strip = strip
+
+    @property
+    def target_path(self):
+        """ Return the path that will be opened if no `bound` is provided
+        """
+
+        return self.resolve_path()
+
+    @property
+    def contents(self):
+        """ Return the internal contents
+        """
+
+        with io.open(self.resolve_path(), "r") as resource:
+            data = resource.read()
+            return data if not self.strip else data.strip()
+
+    def resolve_path(self, bound=None):
+        """ Normalize/expand/resolve the internal path such that
+            the result will not be outside of the tree bounded
+            by `bound`.
+        """
+
+        if bound is None:
+            bound = os.getcwd()
+
+        path = self.path
+        if path[0] == os.path.sep:
+            path = path[1:]
+
+        path = os.path.abspath(path)
+        if os.path.commonpath([path, bound]) != bound:
+            raise Exception("Can not traverse outside of working directory")
+
+        if not os.path.exists(path) or not os.path.isfile(path):
+            raise Exception(f"Path `{path}` not found or is not a file")
+
+        return path
 
 
 class HTTPResource:
@@ -26,7 +111,10 @@ class HTTPResource:
         if isinstance(ssl_verify, bool):
             verify = ssl_verify
         elif isinstance(ssl_verify, str):
-            verify = str(tempfile.NamedTemporaryFile(delete=False, prefix='ssl-').write(verify))
+            verify = str(tempfile.NamedTemporaryFile(
+                delete=False,
+                prefix='ssl-',
+            ).write(verify))
 
         request_data = None
         if form_data:
@@ -79,6 +167,9 @@ class HTTPResource:
         # apply templating of environment variables onto parameters
         rendered_params = self._interpolate(params, values)
 
+        # inject any file reference parameters
+        rendered_params = self._inject_file_contents(rendered_params)
+
         status_code, text = self.cmd(command_argument, rendered_params)
 
         # return empty version object
@@ -90,7 +181,8 @@ class HTTPResource:
         return json.dumps(response)
 
     def _interpolate(self, data, values):
-        """Recursively apply values using format on all string key and values in data."""
+        """ Recursively apply values using format on all string key and values in data.
+        """
 
         if isinstance(data, str):
             return data.format(**values)
@@ -99,6 +191,31 @@ class HTTPResource:
         elif isinstance(data, dict):
             return {self._interpolate(k, values): self._interpolate(v, values)
                     for k, v in data.items()}
+        else:
+            return data
+
+    def _inject_file_contents(self, data):
+        """ If a value starts with an "@" or "-@", load the path following the "@" or "-@"
+            as a file and replace the value with the contents of the file.
+        """
+
+        if isinstance(data, str):
+            try:
+                file_ref = FileReference.parse(data)
+                log.debug(
+                    f"trying to expand data `{data}` into file "
+                    f"reference with path `{file_ref.target_path}`"
+                )
+                return file_ref.contents
+            except FileReference.Unparseable:
+                return data
+            except Exception:
+                log.exception(f"error injecting file contents for data: `{data}`")
+                return data
+        elif isinstance(data, list):
+            return [self._inject_file_contents(item) for item in data]
+        elif isinstance(data, dict):
+            return {k: self._inject_file_contents(v) for k, v in data.items()}
         else:
             return data
 

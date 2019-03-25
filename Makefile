@@ -1,5 +1,5 @@
-user=aequitas
-name=http-resource
+user=pirogoeth
+name=concourse-http-api-resource
 
 docker=docker
 tag = $(user)/$(name)
