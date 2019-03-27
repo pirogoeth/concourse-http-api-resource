@@ -25,4 +25,4 @@ def test_hipchat_notify():
         }
     }
 
-    cmd('out', source, params=params)
+    cmd('out', source, args=["/opt/resource-tests"], params=params)

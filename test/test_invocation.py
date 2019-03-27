@@ -15,7 +15,10 @@ def test_out(httpbin):
         },
         'version': {}
     }
-    subprocess.check_output('/opt/resource/out', input=json.dumps(data).encode())
+    subprocess.check_output(
+        ['/opt/resource/out', '/opt/resource-tests'],
+        input=json.dumps(data).encode(),
+    )
 
 
 def test_out_failure(httpbin):
@@ -28,7 +31,10 @@ def test_out_failure(httpbin):
         'version': {}
     }
     with pytest.raises(subprocess.CalledProcessError):
-        subprocess.check_output('/opt/resource/out', input=json.dumps(data).encode())
+        subprocess.check_output(
+            ['/opt/resource/out', '/opt/resource-tests'],
+            input=json.dumps(data).encode(),
+        )
 
 
 def test_auth(httpbin):
@@ -39,7 +45,10 @@ def test_auth(httpbin):
             'uri': 'http://user:password@{0.host}:{0.port}/basic-auth/user/password'.format(httpbin),
         },
     }
-    subprocess.check_output('/opt/resource/out', input=json.dumps(data).encode())
+    subprocess.check_output(
+        ['/opt/resource/out', '/opt/resource-tests'],
+        input=json.dumps(data).encode(),
+    )
 
 
 def test_json(httpbin):
@@ -54,7 +63,7 @@ def test_json(httpbin):
         'version': {}
     }
 
-    output = cmd('out', source)
+    output = cmd('out', source, args=["/opt/resource-tests"])
 
     assert output['json']['test'] == 123
     assert output['version'] == {}
@@ -76,7 +85,7 @@ def test_interpolation(httpbin):
         }
     }
 
-    output = cmd('out', source)
+    output = cmd('out', source, args=["/opt/resource-tests"])
 
     assert output['json']['object']['test'] == '1'
     assert output['json']['array'][0] == '1'
@@ -91,7 +100,7 @@ def test_empty_check(httpbin):
         'method': 'POST',
     }
 
-    check = cmd('check', source)
+    check = cmd('check', source, args=["/opt/resource-tests"])
 
     assert check == []
 
@@ -109,7 +118,7 @@ def test_data_urlencode(httpbin):
         }
     }
 
-    output = cmd('out', source)
+    output = cmd('out', source, args=["/opt/resource-tests"])
 
     assert output['form'] == {'field': '{"test": 123}'}
     assert output['version'] == {}
@@ -128,7 +137,7 @@ def test_data_ensure_ascii(httpbin):
         },
     }
 
-    output = cmd('out', source)
+    output = cmd('out', source, args=["/opt/resource-tests"])
 
     assert output['form'] == {'field': '{"test": "日本語"}'}
 
@@ -147,7 +156,7 @@ def test_params_file_inject(httpbin):
         },
     }
 
-    output = cmd("out", source)
+    output = cmd("out", source, args=["/opt/resource-tests"])
 
     assert output["form"] == {"triggered_by": '{"commit_sha": "aebe128"}'}
 
@@ -166,6 +175,6 @@ def test_params_file_inject_trim(httpbin):
         },
     }
 
-    output = cmd("out", source)
+    output = cmd("out", source, args=["/opt/resource-tests"])
 
     assert output["form"] == {"triggered_by": '{"commit_sha": "cafe430"}'}

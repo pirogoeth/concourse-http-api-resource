@@ -6,6 +6,7 @@ import logging as log
 import os
 import sys
 import tempfile
+import typing
 
 import requests
 
@@ -37,7 +38,7 @@ class FileReference(object):
             return str(self)
 
     @classmethod
-    def parse(cls, value: str) -> "FileReference":
+    def parse(cls, value: str, **kw) -> "FileReference":
         path = None
         strip = False
 
@@ -49,25 +50,26 @@ class FileReference(object):
         else:
             raise FileReference.Unparseable(value)
 
-        return cls(path, strip=strip)
+        return cls(path, strip=strip, **kw)
 
-    def __init__(self, path, strip=False):
+    def __init__(self, path, strip=False, bounding_path=None):
         self.path = path
         self.strip = strip
+        self.bound = bounding_path
 
     @property
     def target_path(self):
-        """ Return the path that will be opened if no `bound` is provided
+        """ Return the path that will be opened with the provided `bound`
         """
 
-        return self.resolve_path()
+        return self.resolve_path(bound=self.bound)
 
     @property
     def contents(self):
         """ Return the internal contents
         """
 
-        with io.open(self.resolve_path(), "r") as resource:
+        with io.open(self.target_path, "r") as resource:
             data = resource.read()
             return data if not self.strip else data.strip()
 
@@ -84,7 +86,7 @@ class FileReference(object):
         if path[0] == os.path.sep:
             path = path[1:]
 
-        path = os.path.abspath(path)
+        path = os.path.normpath(os.path.join(bound, path))
         if os.path.commonpath([path, bound]) != bound:
             raise Exception("Can not traverse outside of working directory")
 
@@ -131,13 +133,14 @@ class HTTPResource:
 
         return (response.status_code, response.text)
 
-    def run(self, command_name: str, json_data: str, command_argument: str):
+    def run(self, command_name: str, json_data: str, command_argument: typing.List[str]):
         """Parse input/arguments, perform requested command return output."""
 
         with tempfile.NamedTemporaryFile(delete=False, prefix=command_name + '-') as f:
             f.write(bytes(json_data, 'utf-8'))
 
         data = json.loads(json_data)
+        resource_dir = command_argument[0]
 
         # allow debug logging to console for tests
         if os.environ.get('RESOURCE_DEBUG', False) or data.get('source', {}).get('debug', False):
@@ -152,6 +155,7 @@ class HTTPResource:
         log.debug('command: %s', command_name)
         log.debug('input: %s', data)
         log.debug('args: %s', command_argument)
+        log.debug('resource directory: %s', resource_dir)
         log.debug('environment: %s', os.environ)
 
         # initialize values with Concourse environment variables
@@ -168,7 +172,10 @@ class HTTPResource:
         rendered_params = self._interpolate(params, values)
 
         # inject any file reference parameters
-        rendered_params = self._inject_file_contents(rendered_params)
+        rendered_params = self._inject_file_contents(
+            rendered_params,
+            resource_dir,
+        )
 
         status_code, text = self.cmd(command_argument, rendered_params)
 
@@ -194,14 +201,14 @@ class HTTPResource:
         else:
             return data
 
-    def _inject_file_contents(self, data):
+    def _inject_file_contents(self, data, bounding_path):
         """ If a value starts with an "@" or "-@", load the path following the "@" or "-@"
             as a file and replace the value with the contents of the file.
         """
 
         if isinstance(data, str):
             try:
-                file_ref = FileReference.parse(data)
+                file_ref = FileReference.parse(data, bounding_path=bounding_path)
                 log.debug(
                     f"trying to expand data `{data}` into file "
                     f"reference with path `{file_ref.target_path}`"
@@ -213,9 +220,9 @@ class HTTPResource:
                 log.exception(f"error injecting file contents for data: `{data}`")
                 return data
         elif isinstance(data, list):
-            return [self._inject_file_contents(item) for item in data]
+            return [self._inject_file_contents(item, bounding_path) for item in data]
         elif isinstance(data, dict):
-            return {k: self._inject_file_contents(v) for k, v in data.items()}
+            return {k: self._inject_file_contents(v, bounding_path) for k, v in data.items()}
         else:
             return data
 
