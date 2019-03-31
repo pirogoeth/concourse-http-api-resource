@@ -12,7 +12,7 @@ params:
   CONTEXT:
 
 inputs:
-- name: concourse-builder-task
+- name: concourse-http-api-resource
 
 outputs:
 - name: image
