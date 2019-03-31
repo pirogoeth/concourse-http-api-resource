@@ -1,0 +1,38 @@
+---
+
+meta:
+  image:
+    concourse-http-api-resource:
+      context: concourse-http-api-resource/
+      repo: (( concat meta.registry.repository "/http-api-resource" ))
+      tag: latest
+
+resources:
+- name: concourse-http-api-resource
+  type: git
+  source:
+    uri: https://glow.dev.maio.me/saltbox/concourse-http-api-resource.git
+    branch: master
+
+- name: concourse-http-api-resource-image
+  type: registry-image
+  source:
+    repository: (( grab meta.image.concourse-http-api-resource.repo ))
+    .: (( inject meta.registry.auth ))
+
+jobs:
+- name: "build-http-api-resource"
+  public: true
+  plan:
+  - get: concourse-http-api-resource
+    trigger: true
+  - task: "build-http-api-resource-image"
+    file: concourse-http-api-resource/ci/tasks/builder.yml
+    privileged: true
+    params:
+      REPOSITORY: (( grab meta.image.concourse-http-api-resource.repo ))
+      TAG: (( grab meta.image.concourse-http-api-resource.tag || "latest" ))
+      CONTEXT: (( grab meta.image.concourse-http-api-resource.context ))
+  - put: concourse-http-api-resource-image
+    params:
+      image: image/image.tar

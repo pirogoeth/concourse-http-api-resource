@@ -1,0 +1,12 @@
+meta:
+  name:     concourse-http-api-resource
+  target:   glow
+  url:      https://concourse.dev.maio.me
+  team:     main
+  pipeline: concourse-http-api-resource
+
+  registry:
+    repository: containers.dev.maio.me/concourse
+    auth:
+      username: ((glow_registry_ci.username))
+      password: ((glow_registry_ci.password))

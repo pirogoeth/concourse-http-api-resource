@@ -1,0 +1,23 @@
+---
+
+platform: linux
+
+image_resource:
+  type: registry-image
+  source: {repository: containers.dev.maio.me/concourse/builder}
+
+params:
+  REPOSITORY:
+  TAG: latest
+  CONTEXT:
+
+inputs:
+- name: concourse-builder-task
+
+outputs:
+- name: image
+
+caches:
+- path: cache
+
+run: {path: build}
